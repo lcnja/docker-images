@@ -1,11 +1,12 @@
-FROM debian:buster-slim
+FROM debian:bullseye-slim
 
-LABEL MAINTAINER="Anaconda, Inc"
+LABEL maintainer="Anaconda, Inc"
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
+# hadolint ignore=DL3008
 RUN apt-get update -q && \
-    apt-get install -q -y \
+    apt-get install -q -y --no-install-recommends \
         bzip2 \
         ca-certificates \
         git \
@@ -14,24 +15,41 @@ RUN apt-get update -q && \
         libxext6 \
         libxrender1 \
         mercurial \
+        openssh-client \
+        procps \
         subversion \
         wget \
-    && apt-get clean
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV PATH /opt/conda/bin:$PATH
 
 CMD [ "/bin/bash" ]
 
 # Leave these args here to better use the Docker build cache
-ARG CONDA_VERSION=py38_4.9.2
-ARG CONDA_MD5=122c8c9beb51e124ab32a0fa6426c656
+ARG CONDA_VERSION=py311_23.5.2-0
 
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}-Linux-x86_64.sh -O miniconda.sh && \
-    echo "${CONDA_MD5}  miniconda.sh" > miniconda.md5 && \
-    if ! md5sum --status -c miniconda.md5; then exit 1; fi && \
+RUN set -x && \
+    UNAME_M="$(uname -m)" && \
+    if [ "${UNAME_M}" = "x86_64" ]; then \
+        MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}-Linux-x86_64.sh"; \
+        SHA256SUM="634d76df5e489c44ade4085552b97bebc786d49245ed1a830022b0b406de5817"; \
+    elif [ "${UNAME_M}" = "s390x" ]; then \
+        MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}-Linux-s390x.sh"; \
+        SHA256SUM="221a4cd7f0a9275c3263efa07fa37385746de884f4306bb5d1fe5733ca770550"; \
+    elif [ "${UNAME_M}" = "aarch64" ]; then \
+        MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}-Linux-aarch64.sh"; \
+        SHA256SUM="3962738cfac270ae4ff30da0e382aecf6b3305a12064b196457747b157749a7a"; \
+    elif [ "${UNAME_M}" = "ppc64le" ]; then \
+        MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-${CONDA_VERSION}-Linux-ppc64le.sh"; \
+        SHA256SUM="92237cb2a443dd15005ec004f2f744b14de02cd5513a00983c2f191eb43d1b29"; \
+    fi && \
+    wget "${MINICONDA_URL}" -O miniconda.sh -q && \
+    echo "${SHA256SUM} miniconda.sh" > shasum && \
+    if [ "${CONDA_VERSION}" != "latest" ]; then sha256sum --check --status shasum; fi && \
     mkdir -p /opt && \
-    sh miniconda.sh -b -p /opt/conda && \
-    rm miniconda.sh miniconda.md5 && \
+    bash miniconda.sh -b -p /opt/conda && \
+    rm miniconda.sh shasum && \
     ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
     echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
     echo "conda activate base" >> ~/.bashrc && \
